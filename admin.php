@@ -24,8 +24,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_config'])) {
     $sponsor_link = clean_input($_POST['sponsor_link']);
     $sponsor_text = clean_input($_POST['sponsor_text']);
     $server_type = clean_input($_POST['server_type']);
-    $server_ip = clean_input($_POST['server_ip']);
-    $server_port = clean_input($_POST['server_port']);
+    
+    // 根据服务器类型处理不同的字段
+    if ($server_type === 'netease') {
+        $server_ip = clean_input($_POST['netease_server_ip']);
+        $server_port = ''; // 网易版不需要端口
+    } else {
+        $server_ip = clean_input($_POST['international_server_ip']);
+        $server_port = clean_input($_POST['server_port']);
+    }
+    
     $footer_icp = clean_input($_POST['footer_icp']);
     $footer_public_security = clean_input($_POST['footer_public_security']);
     $logo_image = clean_input($_POST['logo_image']);
@@ -170,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
 // 测试服务器状态
 if (isset($_GET['test_server_status'])) {
-    if (!empty($site_config['server_ip'])) {
+    if (!empty($site_config['server_ip']) && $site_config['server_type'] === 'international') {
         $test_status = get_server_status($site_config['server_ip'], $site_config['server_port']);
         if ($test_status) {
             $message = '服务器状态测试成功！';
@@ -178,7 +186,7 @@ if (isset($_GET['test_server_status'])) {
             $message = '无法获取服务器状态，请检查服务器IP和端口设置。';
         }
     } else {
-        $message = '请先设置服务器IP地址。';
+        $message = '请先设置服务器IP地址并确保服务器类型为国际版。';
     }
 }
 
@@ -624,8 +632,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                         <!-- 网易版设置 -->
                         <div id="netease-settings" style="<?php echo $site_config['server_type'] === 'netease' ? '' : 'display: none;'; ?>" class="netease-settings">
                             <div class="form-group">
-                                <label for="server_ip">房间号</label>
-                                <input type="text" id="server_ip" name="server_ip" value="<?php echo htmlspecialchars($site_config['server_ip']); ?>" placeholder="例如: 12345678">
+                                <label for="netease_server_ip">房间号</label>
+                                <input type="text" id="netease_server_ip" name="netease_server_ip" value="<?php echo htmlspecialchars($site_config['server_ip']); ?>" placeholder="例如: 12345678">
                                 <div class="link-help">请输入网易版我的世界联机大厅的房间号</div>
                             </div>
                         </div>
@@ -633,8 +641,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                         <!-- 国际版设置 -->
                         <div id="international-settings" style="<?php echo $site_config['server_type'] === 'international' ? '' : 'display: none;'; ?>">
                             <div class="form-group">
-                                <label for="server_ip">服务器IP地址</label>
-                                <input type="text" id="server_ip" name="server_ip" value="<?php echo htmlspecialchars($site_config['server_ip']); ?>" placeholder="例如: play.example.com">
+                                <label for="international_server_ip">服务器IP地址</label>
+                                <input type="text" id="international_server_ip" name="international_server_ip" value="<?php echo htmlspecialchars($site_config['server_ip']); ?>" placeholder="例如: play.example.com">
                             </div>
                             
                             <div class="form-group">
@@ -642,7 +650,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                                 <input type="text" id="server_port" name="server_port" value="<?php echo htmlspecialchars($site_config['server_port']); ?>" placeholder="默认: 25565">
                             </div>
                             
-                            <?php if (!empty($site_config['server_ip'])): ?>
+                            <?php if (!empty($site_config['server_ip']) && $site_config['server_type'] === 'international'): ?>
                                 <div class="server-status-card">
                                     <h3>服务器状态</h3>
                                     <?php if ($server_status): ?>
