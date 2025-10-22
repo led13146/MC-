@@ -675,6 +675,7 @@ require_once 'config.php';
             line-height: 1.6;
         }
         
+        /* 修复公告弹窗样式 */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -687,6 +688,14 @@ require_once 'config.php';
             justify-content: center;
             z-index: 1000;
             padding: 1rem;
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        
+        .modal-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
         }
         
         .modal-content {
@@ -697,6 +706,12 @@ require_once 'config.php';
             width: 100%;
             max-height: 80vh;
             overflow-y: auto;
+            transform: scale(1);
+            transition: transform 0.3s ease;
+        }
+        
+        .modal-overlay.hidden .modal-content {
+            transform: scale(0.9);
         }
         
         .modal-header {
@@ -718,6 +733,13 @@ require_once 'config.php';
             color: var(--text-light);
             font-size: 1.5rem;
             cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+            transition: background 0.2s;
+        }
+        
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
         
         .room-number {
@@ -773,7 +795,7 @@ require_once 'config.php';
             <div class="mobile-nav">
                 <a href="#intro" class="mobile-nav-link">服务器介绍</a>
                 <a href="#gallery" class="mobile-nav-link">服务器截图</a>
-                <a href="#features" class="mobile-nav-link">特色功能</a>
+                <a href="#features" class="mobile-nav-link">特色玩法</a>
                 <?php if ($site_config['server_type'] === 'international' && !empty($site_config['server_ip'])): ?>
                     <a href="#status" class="mobile-nav-link">服务器状态</a>
                 <?php endif; ?>
@@ -1089,23 +1111,57 @@ require_once 'config.php';
                 });
             });
             
-            // 公告弹窗控制
+            // 修复公告弹窗控制 - 解决关闭延迟问题
             const announcementModal = document.getElementById('announcementModal');
             const closeModal = document.getElementById('closeModal');
             const closeModalBtn = document.getElementById('closeModalBtn');
             
+            // 检查是否已经关闭过公告
+            function shouldShowAnnouncement() {
+                const cookies = document.cookie.split(';');
+                for (let cookie of cookies) {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name === 'announcement_closed' && value === 'true') {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            
             if (announcementModal && closeModal && closeModalBtn) {
-                closeModal.addEventListener('click', function() {
-                    announcementModal.style.display = 'none';
-                });
+                // 页面加载时检查是否显示公告
+                if (!shouldShowAnnouncement()) {
+                    announcementModal.classList.add('hidden');
+                    setTimeout(() => {
+                        announcementModal.style.display = 'none';
+                    }, 300);
+                }
                 
-                closeModalBtn.addEventListener('click', function() {
-                    announcementModal.style.display = 'none';
-                });
+                // 立即关闭弹窗的函数
+                function closeAnnouncementModal() {
+                    announcementModal.classList.add('hidden');
+                    
+                    // 动画结束后完全隐藏
+                    setTimeout(() => {
+                        announcementModal.style.display = 'none';
+                        // 设置cookie，避免重复显示
+                        document.cookie = "announcement_closed=true; max-age=86400; path=/"; // 24小时内不再显示
+                    }, 300); // 匹配CSS过渡时间
+                }
+                
+                closeModal.addEventListener('click', closeAnnouncementModal);
+                closeModalBtn.addEventListener('click', closeAnnouncementModal);
                 
                 announcementModal.addEventListener('click', function(e) {
                     if (e.target === announcementModal) {
-                        announcementModal.style.display = 'none';
+                        closeAnnouncementModal();
+                    }
+                });
+                
+                // 添加键盘支持：按ESC键关闭
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape' && announcementModal.style.display !== 'none') {
+                        closeAnnouncementModal();
                     }
                 });
             }

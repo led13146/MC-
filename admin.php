@@ -2,6 +2,13 @@
 // admin.php - 后台管理页面
 require_once 'config.php';
 
+// 先处理退出登录逻辑 - 移到文件顶部解决headers already sent问题
+if (isset($_GET['logout'])) {
+    session_destroy();
+    header('Location: admin_login.php');
+    exit;
+}
+
 if (!is_logged_in()) {
     header('Location: admin_login.php');
     exit;
@@ -985,14 +992,5 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             }
         });
     </script>
-    
-    <?php
-    // 处理退出登录
-    if (isset($_GET['logout'])) {
-        session_destroy();
-        header('Location: admin_login.php');
-        exit;
-    }
-    ?>
 </body>
 </html>
