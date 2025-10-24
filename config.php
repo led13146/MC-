@@ -63,6 +63,13 @@ function get_announcements($pdo) {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+// 获取所有公告（包括非活跃的）
+function get_all_announcements($pdo) {
+    $stmt = $pdo->prepare("SELECT * FROM announcements ORDER BY created_at DESC");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // 获取需要页面加载时显示的公告
 function get_popup_announcements($pdo) {
     $stmt = $pdo->prepare("SELECT * FROM announcements WHERE is_active = 1 AND show_on_load = 1 ORDER BY created_at DESC");
@@ -135,33 +142,17 @@ function get_server_status($ip, $port = '25565') {
     return null;
 }
 
-// 清理过期的缓存文件
-function clean_old_cache() {
-    $cache_dir = __DIR__ . '/cache';
-    if (!is_dir($cache_dir)) {
-        return;
-    }
-    
-    $files = glob($cache_dir . '/server_status_*.json');
-    $now = time();
-    
-    foreach ($files as $file) {
-        // 删除超过1小时的缓存文件
-        if ($now - filemtime($file) > 3600) {
-            unlink($file);
-        }
-    }
+// 处理公告关闭
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['close_announcement'])) {
+    setcookie('announcement_closed', 'true', time() + 86400, '/'); // 24小时内不再显示
 }
 
-// 执行缓存清理（每次有1%的概率执行，避免频繁操作）
-if (rand(1, 100) === 1) {
-    clean_old_cache();
-}
-
+// 获取所有数据
 $site_config = get_site_config($pdo);
 $gallery_images = get_gallery_images($pdo);
 $server_info = get_server_info($pdo);
 $announcements = get_announcements($pdo);
+$all_announcements = get_all_announcements($pdo);
 $popup_announcements = get_popup_announcements($pdo);
 
 // 处理赞助链接和加入链接

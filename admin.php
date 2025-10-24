@@ -2,7 +2,7 @@
 // admin.php - 后台管理页面
 require_once 'config.php';
 
-// 先处理退出登录逻辑 - 移到文件顶部解决headers already sent问题
+// 先处理退出登录逻辑
 if (isset($_GET['logout'])) {
     session_destroy();
     header('Location: admin_login.php');
@@ -15,6 +15,7 @@ if (!is_logged_in()) {
 }
 
 $message = '';
+$current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'site-config';
 
 // 更新网站配置
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_config'])) {
@@ -43,8 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_config'])) {
     
     $message = '配置已更新！';
     $site_config = get_site_config($pdo);
-    $site_config['sponsor_link'] = process_external_link($site_config['sponsor_link']);
-    $site_config['join_link'] = process_external_link($site_config['join_link']);
+    $current_tab = 'site-config';
 }
 
 // 添加公告
@@ -58,10 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_announcement'])) 
         $stmt = $pdo->prepare("INSERT INTO announcements (title, content, is_active, show_on_load) VALUES (?, ?, ?, ?)");
         $stmt->execute([$title, $content, $is_active, $show_on_load]);
         $message = '公告已添加！';
-        $announcements = get_announcements($pdo);
-        $popup_announcements = get_popup_announcements($pdo);
+        $current_tab = 'announcements';
+        $all_announcements = get_all_announcements($pdo);
     } else {
         $message = '请填写标题和内容！';
+        $current_tab = 'announcements';
     }
 }
 
@@ -78,10 +79,9 @@ if (isset($_GET['toggle_announcement'])) {
         $new_status = $announcement['is_active'] ? 0 : 1;
         $stmt = $pdo->prepare("UPDATE announcements SET is_active = ? WHERE id = ?");
         $stmt->execute([$new_status, $announcement_id]);
-        
         $message = '公告状态已更新！';
-        $announcements = get_announcements($pdo);
-        $popup_announcements = get_popup_announcements($pdo);
+        $current_tab = 'announcements';
+        $all_announcements = get_all_announcements($pdo);
     }
 }
 
@@ -91,10 +91,9 @@ if (isset($_GET['delete_announcement'])) {
     
     $stmt = $pdo->prepare("DELETE FROM announcements WHERE id = ?");
     $stmt->execute([$announcement_id]);
-    
     $message = '公告已删除！';
-    $announcements = get_announcements($pdo);
-    $popup_announcements = get_popup_announcements($pdo);
+    $current_tab = 'announcements';
+    $all_announcements = get_all_announcements($pdo);
 }
 
 // 添加图库图片
@@ -107,9 +106,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_gallery_image']))
         $stmt = $pdo->prepare("INSERT INTO gallery_images (image_url, caption, display_order) VALUES (?, ?, ?)");
         $stmt->execute([$image_url, $caption, $display_order]);
         $message = '图片已添加！';
+        $current_tab = 'gallery';
         $gallery_images = get_gallery_images($pdo);
     } else {
         $message = '请填写图片URL！';
+        $current_tab = 'gallery';
     }
 }
 
@@ -119,8 +120,8 @@ if (isset($_GET['delete_image'])) {
     
     $stmt = $pdo->prepare("DELETE FROM gallery_images WHERE id = ?");
     $stmt->execute([$image_id]);
-    
     $message = '图片已删除！';
+    $current_tab = 'gallery';
     $gallery_images = get_gallery_images($pdo);
 }
 
@@ -135,9 +136,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_server_info'])) {
         $stmt = $pdo->prepare("INSERT INTO server_info (title, description, icon, display_order) VALUES (?, ?, ?, ?)");
         $stmt->execute([$title, $description, $icon, $display_order]);
         $message = '服务器信息已添加！';
+        $current_tab = 'server-info';
         $server_info = get_server_info($pdo);
     } else {
         $message = '请填写标题和描述！';
+        $current_tab = 'server-info';
     }
 }
 
@@ -147,8 +150,8 @@ if (isset($_GET['delete_server_info'])) {
     
     $stmt = $pdo->prepare("DELETE FROM server_info WHERE id = ?");
     $stmt->execute([$info_id]);
-    
     $message = '服务器信息已删除！';
+    $current_tab = 'server-info';
     $server_info = get_server_info($pdo);
 }
 
@@ -168,11 +171,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
             $stmt = $pdo->prepare("UPDATE admin_users SET password = ? WHERE id = ?");
             $stmt->execute([$hashed_password, $user['id']]);
             $message = '密码已更改！';
+            $current_tab = 'change-password';
         } else {
             $message = '新密码和确认密码不匹配！';
+            $current_tab = 'change-password';
         }
     } else {
         $message = '当前密码不正确！';
+        $current_tab = 'change-password';
     }
 }
 
@@ -188,10 +194,20 @@ if (isset($_GET['test_server_status'])) {
     } else {
         $message = '请先设置服务器IP地址并确保服务器类型为国际版。';
     }
+    $current_tab = 'site-config';
 }
 
-// 创作者赞助链接（只在后台显示）
-$creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxPf78HUWcDqfMbh9p97jg5GDitw6FmweOO";
+// 重新获取所有数据以确保显示最新内容
+$announcements = get_announcements($pdo);
+$all_announcements = get_all_announcements($pdo);
+$gallery_images = get_gallery_images($pdo);
+$server_info = get_server_info($pdo);
+
+// 如果是国际版服务器，获取服务器状态用于显示
+$server_status = null;
+if ($site_config['server_type'] === 'international' && !empty($site_config['server_ip'])) {
+    $server_status = get_server_status($site_config['server_ip'], $site_config['server_port']);
+}
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -219,11 +235,12 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             font-family: system-ui, -apple-system, sans-serif;
             background-color: var(--dark);
             color: var(--text-light);
+            min-height: 100vh;
         }
         
         .admin-header {
             background: var(--light);
-            padding: 1rem;
+            padding: 1rem 2rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             justify-content: space-between;
@@ -320,6 +337,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             cursor: pointer;
             font-weight: bold;
             transition: background 0.2s;
+            text-decoration: none;
         }
         
         .btn:hover {
@@ -421,42 +439,6 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             display: block;
         }
         
-        .sponsor-button-preview {
-            display: inline-block;
-            background-color: var(--accent);
-            color: white;
-            font-weight: 500;
-            padding: 0.25rem 1rem;
-            border-radius: 0.25rem;
-            text-decoration: none;
-            clip-path: polygon(
-                0% 4px, 4px 4px, 4px 0%, calc(100% - 4px) 0%, calc(100% - 4px) 4px, 
-                100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), 
-                calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0% calc(100% - 4px)
-            );
-            transition: all 0.2s ease;
-            margin-top: 0.5rem;
-        }
-        
-        .sponsor-button-preview:hover {
-            background-color: rgba(245, 158, 11, 0.9);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        
-        .link-help {
-            color: var(--text-gray);
-            font-size: 0.875rem;
-            margin-top: 0.25rem;
-        }
-        
-        .link-example {
-            display: block;
-            color: var(--secondary);
-            font-size: 0.75rem;
-            margin-top: 0.25rem;
-        }
-        
         .announcements-list {
             margin-top: 1rem;
         }
@@ -481,8 +463,9 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
         }
         
         .announcement-meta {
-            color: var(--text-gray);
+            color: var(--text-light);
             font-size: 0.875rem;
+            opacity: 0.7;
         }
         
         .announcement-actions {
@@ -528,7 +511,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
         
         .status-label {
             font-size: 0.875rem;
-            color: var(--text-gray);
+            color: var(--text-light);
+            opacity: 0.7;
             margin-bottom: 0.25rem;
         }
         
@@ -544,40 +528,84 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             border-left: 4px solid var(--accent);
         }
         
-        /* 创作者赞助按钮样式 */
-        .creator-sponsor-btn {
-            display: block;
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--accent);
-            color: white;
-            border: none;
+        .image-preview {
+            margin-top: 0.5rem;
+        }
+        
+        .image-preview img {
+            max-width: 200px;
+            max-height: 100px;
             border-radius: 0.25rem;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.2s;
-            text-align: center;
-            text-decoration: none;
+        }
+        
+        .server-status-test {
+            background: rgba(15, 23, 42, 0.5);
+            padding: 1rem;
+            border-radius: 0.5rem;
             margin-top: 1rem;
         }
         
-        .creator-sponsor-btn:hover {
-            background: rgba(245, 158, 11, 0.9);
+        .status-test {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
         }
         
-        .creator-sponsor-header {
-            display: inline-block;
+        .status-test.success {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: var(--secondary);
+        }
+        
+        .status-test.error {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+        }
+        
+        .popup-badge {
             background: var(--accent);
             color: white;
-            font-weight: 500;
-            padding: 0.25rem 1rem;
+            padding: 0.25rem 0.5rem;
             border-radius: 0.25rem;
-            text-decoration: none;
-            margin-left: 1rem;
+            font-size: 0.75rem;
+            font-weight: bold;
         }
         
-        .creator-sponsor-header:hover {
-            background: rgba(245, 158, 11, 0.9);
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        
+        .status-badge.active {
+            background: var(--secondary);
+            color: white;
+        }
+        
+        .status-badge.inactive {
+            background: #EF4444;
+            color: white;
+        }
+        
+        .admin-announcement {
+            border-left: 4px solid var(--secondary);
+        }
+        
+        .admin-form {
+            max-width: 600px;
+        }
+        
+        .admin-gallery {
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        }
+        
+        small {
+            color: var(--text-light);
+            opacity: 0.7;
+            font-size: 0.875rem;
         }
     </style>
 </head>
@@ -586,9 +614,6 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
         <h1><?php echo $site_config['site_name']; ?> - 后台管理</h1>
         <div>
             <span>欢迎, <?php echo $_SESSION['admin_username']; ?></span>
-            <a href="<?php echo $creator_sponsor_link; ?>" target="_blank" class="creator-sponsor-header">
-                赞助创作者
-            </a>
             <a href="?logout=1" style="color: var(--text-light); margin-left: 1rem;">退出</a>
         </div>
     </div>
@@ -600,11 +625,6 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             <a href="#gallery" class="nav-link" onclick="switchTab('gallery')">图片展示</a>
             <a href="#server-info" class="nav-link" onclick="switchTab('server-info')">服务器信息</a>
             <a href="#change-password" class="nav-link" onclick="switchTab('change-password')">修改密码</a>
-            
-            <!-- 创作者赞助按钮 -->
-            <a href="<?php echo $creator_sponsor_link; ?>" target="_blank" class="creator-sponsor-btn">
-                赞助创作者
-            </a>
         </div>
         
         <div class="admin-content">
@@ -615,7 +635,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             <div id="site-config" class="tab-content active">
                 <div class="section">
                     <h2 class="section-title">网站配置</h2>
-                    <form method="POST">
+                    <form method="POST" class="admin-form">
+                        <input type="hidden" name="update_config" value="1">
                         <div class="form-group">
                             <label for="site_name">网站名称</label>
                             <input type="text" id="site_name" name="site_name" value="<?php echo htmlspecialchars($site_config['site_name']); ?>" required>
@@ -623,18 +644,18 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                         
                         <div class="form-group">
                             <label for="server_type">服务器类型</label>
-                            <select id="server_type" name="server_type" required>
+                            <select id="server_type" name="server_type" required onchange="updateServerSettings()">
                                 <option value="netease" <?php echo $site_config['server_type'] === 'netease' ? 'selected' : ''; ?>>网易版</option>
                                 <option value="international" <?php echo $site_config['server_type'] === 'international' ? 'selected' : ''; ?>>国际版</option>
                             </select>
                         </div>
                         
                         <!-- 网易版设置 -->
-                        <div id="netease-settings" style="<?php echo $site_config['server_type'] === 'netease' ? '' : 'display: none;'; ?>" class="netease-settings">
+                        <div id="netease-settings" class="netease-settings" style="<?php echo $site_config['server_type'] === 'netease' ? '' : 'display: none;'; ?>">
                             <div class="form-group">
                                 <label for="netease_server_ip">房间号</label>
                                 <input type="text" id="netease_server_ip" name="netease_server_ip" value="<?php echo htmlspecialchars($site_config['server_ip']); ?>" placeholder="例如: 12345678">
-                                <div class="link-help">请输入网易版我的世界联机大厅的房间号</div>
+                                <small>请输入网易版我的世界联机大厅的房间号</small>
                             </div>
                         </div>
                         
@@ -651,46 +672,20 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                             </div>
                             
                             <?php if (!empty($site_config['server_ip']) && $site_config['server_type'] === 'international'): ?>
-                                <div class="server-status-card">
-                                    <h3>服务器状态</h3>
+                                <div class="server-status-test">
+                                    <h3>服务器状态测试</h3>
                                     <?php if ($server_status): ?>
-                                        <div class="status-item">
-                                            <span class="status-label">状态:</span>
-                                            <span class="status-value">
-                                                <span class="status-indicator status-online"></span>
-                                                在线
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="server-status-info">
-                                            <div class="status-item">
-                                                <span class="status-label">版本:</span>
-                                                <span class="status-value"><?php echo htmlspecialchars($server_status['version'] ?? '未知'); ?></span>
-                                            </div>
-                                            
-                                            <div class="status-item">
-                                                <span class="status-label">在线玩家:</span>
-                                                <span class="status-value"><?php echo htmlspecialchars($server_status['players']['online'] ?? '0'); ?> / <?php echo htmlspecialchars($server_status['players']['max'] ?? '0'); ?></span>
-                                            </div>
-                                            
-                                            <div class="status-item">
-                                                <span class="status-label">MOTD:</span>
-                                                <span class="status-value"><?php echo htmlspecialchars($server_status['pureMotd'] ?? '无'); ?></span>
-                                            </div>
+                                        <div class="status-test success">
+                                            <span class="status-indicator status-online"></span>
+                                            服务器在线 - 版本: <?php echo htmlspecialchars($server_status['version'] ?? '未知'); ?>
                                         </div>
                                     <?php else: ?>
-                                        <div class="status-item">
-                                            <span class="status-label">状态:</span>
-                                            <span class="status-value">
-                                                <span class="status-indicator status-offline"></span>
-                                                离线或无法连接
-                                            </span>
+                                        <div class="status-test error">
+                                            <span class="status-indicator status-offline"></span>
+                                            服务器离线或无法连接
                                         </div>
                                     <?php endif; ?>
-                                    
-                                    <div style="margin-top: 1rem;">
-                                        <a href="?test_server_status=1" class="btn btn-warning">测试服务器状态</a>
-                                    </div>
+                                    <a href="?test_server_status=1&tab=site-config" class="btn">测试服务器状态</a>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -698,8 +693,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                         <div class="form-group">
                             <label for="join_link">加入链接</label>
                             <input type="text" id="join_link" name="join_link" value="<?php echo htmlspecialchars($site_config['join_link']); ?>" required>
-                            <div class="link-help">请输入完整的外部链接地址</div>
-                            <span class="link-example">例如: https://discord.gg/your-server 或 www.patreon.com/your-page</span>
+                            <small>请输入完整的外部链接地址，例如: https://discord.gg/your-server</small>
                         </div>
                         
                         <div class="form-group">
@@ -710,27 +704,20 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                         <div class="form-group">
                             <label for="sponsor_link">赞助链接</label>
                             <input type="text" id="sponsor_link" name="sponsor_link" value="<?php echo htmlspecialchars($site_config['sponsor_link']); ?>" required>
-                            <div class="link-help">请输入完整的外部链接地址</div>
-                            <span class="link-example">例如: https://www.paypal.com/your-link 或 ko-fi.com/your-page</span>
+                            <small>请输入完整的外部链接地址，例如: https://www.paypal.com/your-link</small>
                         </div>
                         
                         <div class="form-group">
                             <label for="sponsor_text">赞助按钮文本</label>
                             <input type="text" id="sponsor_text" name="sponsor_text" value="<?php echo htmlspecialchars($site_config['sponsor_text']); ?>" required>
-                            <div>
-                                <a href="<?php echo htmlspecialchars($site_config['sponsor_link']); ?>" class="sponsor-button-preview" target="_blank">
-                                    <?php echo htmlspecialchars($site_config['sponsor_text']); ?>
-                                </a>
-                                <small>按钮预览 - 点击测试链接</small>
-                            </div>
                         </div>
                         
                         <div class="form-group">
                             <label for="logo_image">Logo图片URL</label>
-                            <input type="text" id="logo_image" name="logo_image" value="<?php echo htmlspecialchars($site_config['logo_image']); ?>" placeholder="输入图片URL或上传图片">
+                            <input type="text" id="logo_image" name="logo_image" value="<?php echo htmlspecialchars($site_config['logo_image']); ?>" placeholder="输入图片URL">
                             <?php if ($site_config['logo_image']): ?>
-                                <div style="margin-top: 0.5rem;">
-                                    <img src="<?php echo $site_config['logo_image']; ?>" alt="Logo" style="max-width: 200px; max-height: 100px;">
+                                <div class="image-preview">
+                                    <img src="<?php echo $site_config['logo_image']; ?>" alt="Logo预览">
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -745,7 +732,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                             <input type="text" id="footer_public_security" name="footer_public_security" value="<?php echo htmlspecialchars($site_config['footer_public_security']); ?>">
                         </div>
                         
-                        <button type="submit" name="update_config" class="btn">保存配置</button>
+                        <button type="submit" class="btn">保存配置</button>
                     </form>
                 </div>
             </div>
@@ -754,7 +741,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                 <div class="section">
                     <h2 class="section-title">公告管理</h2>
                     
-                    <form method="POST">
+                    <form method="POST" class="admin-form">
+                        <input type="hidden" name="add_announcement" value="1">
                         <div class="form-group">
                             <label for="title">公告标题</label>
                             <input type="text" id="title" name="title" required>
@@ -779,18 +767,23 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                             </div>
                         </div>
                         
-                        <button type="submit" name="add_announcement" class="btn">添加公告</button>
+                        <button type="submit" class="btn">添加公告</button>
                     </form>
                     
                     <div class="announcements-list">
-                        <?php foreach ($announcements as $announcement): ?>
-                            <div class="announcement-item">
+                        <?php foreach ($all_announcements as $announcement): ?>
+                            <div class="announcement-item admin-announcement">
                                 <div class="announcement-header">
                                     <div class="announcement-title"><?php echo htmlspecialchars($announcement['title']); ?></div>
                                     <div class="announcement-meta">
                                         <?php echo date('Y-m-d H:i', strtotime($announcement['created_at'])); ?>
                                         <?php if ($announcement['show_on_load']): ?>
-                                            <span style="color: var(--accent);">[弹出]</span>
+                                            <span class="popup-badge">弹出显示</span>
+                                        <?php endif; ?>
+                                        <?php if ($announcement['is_active']): ?>
+                                            <span class="status-badge active">已启用</span>
+                                        <?php else: ?>
+                                            <span class="status-badge inactive">已禁用</span>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -798,10 +791,10 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                                     <?php echo nl2br(htmlspecialchars($announcement['content'])); ?>
                                 </div>
                                 <div class="announcement-actions">
-                                    <a href="?toggle_announcement=<?php echo $announcement['id']; ?>" class="btn btn-warning">
+                                    <a href="?toggle_announcement=<?php echo $announcement['id']; ?>&tab=announcements" class="btn btn-warning">
                                         <?php echo $announcement['is_active'] ? '禁用' : '启用'; ?>
                                     </a>
-                                    <a href="?delete_announcement=<?php echo $announcement['id']; ?>" class="btn btn-danger" onclick="return confirm('确定删除这个公告吗？')">删除</a>
+                                    <a href="?delete_announcement=<?php echo $announcement['id']; ?>&tab=announcements" class="btn btn-danger" onclick="return confirm('确定删除这个公告吗？')">删除</a>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -813,7 +806,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                 <div class="section">
                     <h2 class="section-title">图片展示管理</h2>
                     
-                    <form method="POST">
+                    <form method="POST" class="admin-form">
+                        <input type="hidden" name="add_gallery_image" value="1">
                         <div class="form-group">
                             <label for="image_url">图片URL</label>
                             <input type="text" id="image_url" name="image_url" placeholder="输入图片URL" required>
@@ -829,15 +823,15 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                             <input type="number" id="display_order" name="display_order" value="0">
                         </div>
                         
-                        <button type="submit" name="add_gallery_image" class="btn">添加图片</button>
+                        <button type="submit" class="btn">添加图片</button>
                     </form>
                     
-                    <div class="gallery-grid">
+                    <div class="gallery-grid admin-gallery">
                         <?php foreach ($gallery_images as $image): ?>
                             <div class="gallery-item">
                                 <img src="<?php echo $image['image_url']; ?>" alt="<?php echo htmlspecialchars($image['caption']); ?>">
                                 <div class="gallery-caption"><?php echo htmlspecialchars($image['caption']); ?></div>
-                                <a href="?delete_image=<?php echo $image['id']; ?>" class="delete-btn" onclick="return confirm('确定删除这张图片吗？')">×</a>
+                                <a href="?delete_image=<?php echo $image['id']; ?>&tab=gallery" class="delete-btn" onclick="return confirm('确定删除这张图片吗？')">×</a>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -848,7 +842,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                 <div class="section">
                     <h2 class="section-title">服务器信息管理</h2>
                     
-                    <form method="POST">
+                    <form method="POST" class="admin-form">
+                        <input type="hidden" name="add_server_info" value="1">
                         <div class="form-group">
                             <label for="title">标题</label>
                             <input type="text" id="title" name="title" required>
@@ -860,9 +855,15 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                         </div>
                         
                         <div class="form-group">
-                            <label for="icon">图标类名</label>
-                            <input type="text" id="icon" name="icon" value="fa-globe" placeholder="例如: fa-globe, fa-users, fa-shield">
-                            <small>可用图标: fa-globe, fa-users, fa-shield, fa-heart, fa-star, fa-gamepad</small>
+                            <label for="icon">图标</label>
+                            <select id="icon" name="icon">
+                                <option value="fa-globe">🌐 地球</option>
+                                <option value="fa-users">👥 用户</option>
+                                <option value="fa-shield">🛡️ 盾牌</option>
+                                <option value="fa-heart">❤️ 爱心</option>
+                                <option value="fa-star">⭐ 星星</option>
+                                <option value="fa-gamepad">🎮 游戏手柄</option>
+                            </select>
                         </div>
                         
                         <div class="form-group">
@@ -870,7 +871,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                             <input type="number" id="display_order" name="display_order" value="0">
                         </div>
                         
-                        <button type="submit" name="add_server_info" class="btn">添加信息</button>
+                        <button type="submit" class="btn">添加信息</button>
                     </form>
                     
                     <div class="server-info-list">
@@ -882,7 +883,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                                     <small>图标: <?php echo $info['icon']; ?> | 顺序: <?php echo $info['display_order']; ?></small>
                                 </div>
                                 <div class="server-info-actions">
-                                    <a href="?delete_server_info=<?php echo $info['id']; ?>" class="btn btn-danger" onclick="return confirm('确定删除这条信息吗？')">删除</a>
+                                    <a href="?delete_server_info=<?php echo $info['id']; ?>&tab=server-info" class="btn btn-danger" onclick="return confirm('确定删除这条信息吗？')">删除</a>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -893,7 +894,8 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             <div id="change-password" class="tab-content">
                 <div class="section">
                     <h2 class="section-title">修改密码</h2>
-                    <form method="POST">
+                    <form method="POST" class="admin-form">
+                        <input type="hidden" name="change_password" value="1">
                         <div class="form-group">
                             <label for="current_password">当前密码</label>
                             <input type="password" id="current_password" name="current_password" required>
@@ -909,7 +911,7 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
                             <input type="password" id="confirm_password" name="confirm_password" required>
                         </div>
                         
-                        <button type="submit" name="change_password" class="btn">修改密码</button>
+                        <button type="submit" class="btn">修改密码</button>
                     </form>
                 </div>
             </div>
@@ -938,66 +940,25 @@ $creator_sponsor_link = "https://pay.xiangyuwl.cn/paypage/?merchant=9e712WglztxP
             event.currentTarget.classList.add('active');
         }
         
-        // 页面加载完成后执行
-        document.addEventListener('DOMContentLoaded', function() {
-            // 实时更新赞助按钮预览
-            const sponsorLinkInput = document.getElementById('sponsor_link');
-            const sponsorTextInput = document.getElementById('sponsor_text');
-            const sponsorButtonPreview = document.querySelector('.sponsor-button-preview');
-            
-            function processLinkForPreview(link) {
-                if (!link || link === '#') {
-                    return '#';
-                }
-                
-                // 如果已经是完整URL，直接返回
-                if (link.startsWith('http://') || link.startsWith('https://')) {
-                    return link;
-                }
-                
-                // 如果是外部链接但没有协议，添加https://
-                if (link.startsWith('www.') || link.startsWith('//') || 
-                    (link.includes('.') && !link.includes('/') && !link.includes(' '))) {
-                    return 'https://' + link.replace(/^\/+/, '');
-                }
-                
-                // 其他情况，直接返回
-                return link;
-            }
-            
-            function updateSponsorButtonPreview() {
-                const processedLink = processLinkForPreview(sponsorLinkInput.value);
-                sponsorButtonPreview.href = processedLink;
-                sponsorButtonPreview.textContent = sponsorTextInput.value;
-            }
-            
-            if (sponsorLinkInput && sponsorTextInput && sponsorButtonPreview) {
-                sponsorLinkInput.addEventListener('input', updateSponsorButtonPreview);
-                sponsorTextInput.addEventListener('input', updateSponsorButtonPreview);
-            }
-            
-            // 服务器类型切换显示对应的设置
-            const serverTypeSelect = document.getElementById('server_type');
+        // 服务器类型切换显示对应的设置
+        function updateServerSettings() {
+            const serverType = document.getElementById('server_type').value;
             const neteaseSettings = document.getElementById('netease-settings');
             const internationalSettings = document.getElementById('international-settings');
             
-            function updateServerSettings() {
-                if (serverTypeSelect && neteaseSettings && internationalSettings) {
-                    if (serverTypeSelect.value === 'netease') {
-                        neteaseSettings.style.display = 'block';
-                        internationalSettings.style.display = 'none';
-                    } else {
-                        neteaseSettings.style.display = 'none';
-                        internationalSettings.style.display = 'block';
-                    }
-                }
+            if (serverType === 'netease') {
+                neteaseSettings.style.display = 'block';
+                internationalSettings.style.display = 'none';
+            } else {
+                neteaseSettings.style.display = 'none';
+                internationalSettings.style.display = 'block';
             }
-            
-            if (serverTypeSelect) {
-                serverTypeSelect.addEventListener('change', updateServerSettings);
-                // 初始化时更新一次
-                updateServerSettings();
-            }
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化服务器类型显示
+            updateServerSettings();
         });
     </script>
 </body>

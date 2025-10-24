@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $queries = [
                         "CREATE TABLE IF NOT EXISTS site_config (
                             id INT AUTO_INCREMENT PRIMARY KEY,
-                            site_name VARCHAR(255) DEFAULT '我的世界网易版联机大厅',
+                            site_name VARCHAR(255) DEFAULT '我的世界服务器',
                             join_link VARCHAR(500) DEFAULT '#',
                             join_text VARCHAR(100) DEFAULT '加入我们',
                             sponsor_link VARCHAR(500) DEFAULT '#',
@@ -112,23 +112,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     
                     // 初始化默认配置
-                    $pdo->exec("INSERT INTO site_config (site_name, join_link, join_text, sponsor_link, sponsor_text, server_type) VALUES ('我的世界网易版联机大厅', '#', '加入我们', '#', '赞助我们', '$server_type')");
+                    $pdo->exec("INSERT INTO site_config (site_name, join_link, join_text, sponsor_link, sponsor_text, server_type) VALUES ('我的世界服务器', '#', '加入我们', '#', '赞助我们', '$server_type')");
                     
                     // 初始化默认公告
                     $pdo->exec("INSERT INTO announcements (title, content, is_active, show_on_load) VALUES ('欢迎来到我们的服务器！', '欢迎各位玩家加入我们的我的世界服务器！请遵守服务器规则，享受游戏乐趣。', 1, 1)");
                     
                     // 初始化服务器信息
                     $server_info_data = [
-                        ['稳定流畅', '高性能服务器保障，提供稳定流畅的游戏体验，拒绝卡顿和延迟。', 'fa-globe'],
-                        ['友好社区', '活跃友好的玩家社区，定期举办活动，营造良好的游戏氛围。', 'fa-users'],
-                        ['安全保障', '完善的防作弊系统和数据备份，保护玩家的游戏成果和数据安全。', 'fa-shield'],
-                        ['持续更新', '定期更新游戏内容和功能，保持服务器的新鲜感和可玩性。', 'fa-heart']
+                        ['稳定流畅', '高性能服务器保障，提供稳定流畅的游戏体验，拒绝卡顿和延迟。', 'fa-globe', 0],
+                        ['友好社区', '活跃友好的玩家社区，定期举办活动，营造良好的游戏氛围。', 'fa-users', 1],
+                        ['安全保障', '完善的防作弊系统和数据备份，保护玩家的游戏成果和数据安全。', 'fa-shield', 2],
+                        ['持续更新', '定期更新游戏内容和功能，保持服务器的新鲜感和可玩性。', 'fa-heart', 3]
                     ];
                     
                     $stmt = $pdo->prepare("INSERT INTO server_info (title, description, icon, display_order) VALUES (?, ?, ?, ?)");
-                    $order = 0;
                     foreach ($server_info_data as $info) {
-                        $stmt->execute([$info[0], $info[1], $info[2], $order++]);
+                        $stmt->execute($info);
                     }
                     
                     // 创建管理员账户
@@ -343,9 +342,100 @@ function clean_input($data) {
         .server-type-option input {
             display: none;
         }
+        
+        /* 加载动画样式 */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--dark);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        .loading-content {
+            text-align: center;
+            max-width: 500px;
+            padding: 2rem;
+        }
+        
+        .minecraft-logo {
+            font-family: 'Minecraft', monospace;
+            font-size: 3rem;
+            margin-bottom: 2rem;
+            color: var(--secondary);
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+        
+        .loading-bar {
+            width: 100%;
+            height: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        
+        .loading-progress {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--secondary), var(--primary));
+            border-radius: 4px;
+            animation: loading 2s ease-in-out forwards;
+        }
+        
+        @keyframes loading {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        
+        .loading-text {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+        
+        /* 页面加载完成后隐藏加载屏幕 */
+        body.loaded #loading-screen {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* 隐藏主内容直到加载完成 */
+        .install-container {
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        
+        body.loaded .install-container {
+            opacity: 1;
+        }
+        
+        /* 内联样式确保加载页面立即显示 */
+        body:not(.loaded) #loading-screen {
+            display: flex !important;
+        }
+        body:not(.loaded) .install-container {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
+    <!-- 加载动画 -->
+    <div id="loading-screen">
+        <div class="loading-content">
+            <div class="minecraft-logo">安装向导</div>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+            <p class="loading-text">正在加载安装程序...</p>
+        </div>
+    </div>
+
     <div class="install-container">
         <h1 class="install-title">我的世界服务器 - 安装向导</h1>
         
@@ -466,7 +556,7 @@ function clean_input($data) {
             </div>
         <?php endif; ?>
     </div>
-    
+
     <script>
         // 服务器类型选择
         document.addEventListener('DOMContentLoaded', function() {
@@ -487,6 +577,11 @@ function clean_input($data) {
                     radio.checked = true;
                 });
             });
+            
+            // 页面加载完成后显示内容
+            setTimeout(function() {
+                document.body.classList.add('loaded');
+            }, 1500);
         });
     </script>
 </body>
